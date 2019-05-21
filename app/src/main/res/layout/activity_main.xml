@@ -9,6 +9,6 @@
     <com.something.driver.CarTrackView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_gravity="center"/>
+        app:roadColor="@android:color/holo_blue_bright"/>
 
 </FrameLayout>

@@ -22,62 +22,34 @@ class CarTrackView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private var carX = 0f
     private var carY = 0f
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val animationHelper = AnimationHelper(carX, carY, TRIP_DURATION)
+    private val animationHelper = AnimationHelper(TRIP_DURATION, { handleTouches = false }, { handleTouches = true })
     private val carMatrix = Matrix()
+    private var roadColor: Int? = null
     private var handleTouches = true
 
     init {
+        attrs?.let {
+            val typedArray = context.obtainStyledAttributes(it, R.styleable.CarTrackView, 0, 0)
+            typedArray.getResourceId(R.styleable.CarTrackView_roadColor, 0)
+                .apply {
+                    roadColor = ContextCompat.getColor(context, this)
+                }
+
+            typedArray.recycle()
+        }
+
         setOnTouchListener { _, event ->
             when (event.action and MotionEvent.ACTION_MASK) {
                 MotionEvent.ACTION_UP -> {
                     if (handleTouches) {
+                        carX = animationHelper.endPoint[0]
+                        carY = animationHelper.endPoint[1]
                         val values = FloatArray(9)
                         carMatrix.getValues(values)
                         val angle = Math.atan2(values[Matrix.MSKEW_X].toDouble(), values[Matrix.MSCALE_X].toDouble())
-                        val x2 = carX + cos(angle).toFloat() * POINT_TWO_DISTANCE
-                        val y2 = carY - sin(angle).toFloat() * POINT_TWO_DISTANCE
-                        val x4 = event.x
-                        val y4 = event.y
-                        val angle2 = -Math.atan2(y4.toDouble() - carY, x4.toDouble() - carX)
-                        val angleInDegrees = angle * 180 / Math.PI
-                        val angleTwoInDegrees = angle2 * 180 / Math.PI
-                        val angleDegRound = if (angleInDegrees < 0) angleInDegrees + 360 else angleInDegrees
-                        val angleDegTwoRound = if (angleTwoInDegrees < 0) angleTwoInDegrees + 360 else angleTwoInDegrees
-
-                        val diff = Math.abs(angleDegRound - angleDegTwoRound)
-                        val resAngle = Math.toRadians(
-                            if (diff <= 180) {
-                                angleInDegrees + 90
-                            } else {
-                                angleTwoInDegrees - 90
-                            }
-                        )
-
-                        val ax = x2 - carX
-                        val ay = y2 - carY
-                        val bx = x4 - carX
-                        val by = y4 - carY
-                        val a = sqrt(ax.pow(2) + ay.pow(2))
-                        val b = sqrt(bx.pow(2) + by.pow(2))
-                        val multiply = ax * bx + ay * by
-                        val arccos = Math.acos(multiply / (a * b.toDouble())) * 180 / Math.PI
-
-                        val x3 = carX + cos(resAngle).toFloat() * POINT_THREE_DISTANCE * arccos.toFloat()
-                        val y3 = carY - sin(resAngle).toFloat() * POINT_THREE_DISTANCE * arccos.toFloat()
-
-                        animationHelper.animate(x2, y2, x3, y3, x4, y4)
-                            .addListener(object : Animator.AnimatorListener {
-                                override fun onAnimationRepeat(animation: Animator?) {}
-                                override fun onAnimationCancel(animation: Animator?) {}
-
-                                override fun onAnimationStart(animation: Animator?) {
-                                    handleTouches = false
-                                }
-
-                                override fun onAnimationEnd(animation: Animator?) {
-                                    handleTouches = true
-                                }
-                            })
+                        countPoints(carX, carY, event.x, event.y, angle.toFloat()).apply {
+                            animationHelper.animate(this)
+                        }
                     }
                 }
             }
@@ -87,25 +59,59 @@ class CarTrackView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     override fun onDraw(canvas: Canvas?) {
         canvas?.apply {
-            drawColor(ContextCompat.getColor(context, R.color.colorAccent))
+            roadColor?.apply {
+                drawColor(this)
+            } ?: ContextCompat.getColor(context, R.color.colorAccent)
             canvas.drawBitmap(car, carMatrix, paint)
         }
         super.onDraw(canvas)
     }
 
-    inner class AnimationHelper(
-        private var x: Float,
-        private var y: Float,
-        private val duration: Long
-    ) {
+    private fun countPoints(px1: Float, py1: Float, px2: Float, py2: Float, angle: Float): BezierCurve {
+
+        val x2 = px1 + cos(angle) * POINT_TWO_DISTANCE
+        val y2 = py1 - sin(angle) * POINT_TWO_DISTANCE
+        val x4 = px2
+        val y4 = py2
+        val angle2 = -Math.atan2(y4.toDouble() - py1, x4.toDouble() - px1)
+        val angleInDegrees = angle * 180 / Math.PI
+        val angleTwoInDegrees = angle2 * 180 / Math.PI
+        val angleDegRound = if (angleInDegrees < 0) angleInDegrees + 360 else angleInDegrees
+        val angleDegTwoRound = if (angleTwoInDegrees < 0) angleTwoInDegrees + 360 else angleTwoInDegrees
+
+        val diff = Math.abs(angleDegRound - angleDegTwoRound)
+        val resAngle = Math.toRadians(
+            if (diff <= 180) {
+                angleInDegrees + 90
+            } else {
+                angleTwoInDegrees - 90
+            }
+        )
+
+        val ax = x2 - px1
+        val ay = y2 - py1
+        val bx = x4 - px1
+        val by = y4 - py1
+        val a = sqrt(ax.pow(2) + ay.pow(2))
+        val b = sqrt(bx.pow(2) + by.pow(2))
+        val multiply = ax * bx + ay * by
+        val arccos = Math.acos(multiply / (a * b).toDouble()) * 180 / Math.PI
+
+        val x3 = px1 + cos(resAngle).toFloat() * POINT_THREE_DISTANCE * arccos.toFloat()
+        val y3 = py1 - sin(resAngle).toFloat() * POINT_THREE_DISTANCE * arccos.toFloat()
+
+        return BezierCurve(px1, py1, x2, y2, x3, y3, x4, y4)
+    }
+
+    private inner class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnFinish: () -> Unit) {
+        val endPoint = FloatArray(2) { 0f }
         private val animator = ValueAnimator()
         private val path = Path()
         private val pathMeasure = PathMeasure()
-        private val points = FloatArray(2) { 0f }
 
         init {
             animator.apply {
-                duration = this@AnimationHelper.duration
+                this.duration = duration
                 this.interpolator = AccelerateDecelerateInterpolator()
                 setFloatValues(0f, 1f)
                 addUpdateListener {
@@ -115,29 +121,49 @@ class CarTrackView @JvmOverloads constructor(context: Context, attrs: AttributeS
                         carMatrix,
                         PathMeasure.POSITION_MATRIX_FLAG + PathMeasure.TANGENT_MATRIX_FLAG
                     )
-                    pathMeasure.getPosTan(pathMeasure.length * it.animatedFraction, points, null)
+                    pathMeasure.getPosTan(pathMeasure.length * it.animatedFraction, endPoint, null)
 
-                    carX = points[0]
-                    carY = points[1]
                     invalidate()
                 }
+                addListener(object : Animator.AnimatorListener {
+                    override fun onAnimationRepeat(animation: Animator?) {}
+                    override fun onAnimationCancel(animation: Animator?) {}
+
+                    override fun onAnimationStart(animation: Animator?) {
+                        doOnStart()
+                    }
+
+                    override fun onAnimationEnd(animation: Animator?) {
+                        doOnFinish()
+                    }
+                })
             }
         }
 
-        fun animate(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float): Animator {
-            this.x = carX
-            this.y = carY
+        fun animate(curve: BezierCurve) {
             path.reset()
-            path.moveTo(x, y)
-            path.cubicTo(x1, y1, x2, y2, x3, y3)
+            curve.apply {
+                path.moveTo(x1, y1)
+                path.cubicTo(x2, y2, x3, y3, x4, y4)
+            }
             pathMeasure.setPath(path, false)
             animator.start()
-            return animator
         }
 
     }
 
-    companion object {
+    private data class BezierCurve(
+        val x1: Float,
+        val y1: Float,
+        val x2: Float,
+        val y2: Float,
+        val x3: Float,
+        val y3: Float,
+        val x4: Float,
+        val y4: Float
+    )
+
+    private companion object {
 
         private const val TRIP_DURATION = 4000L
         private const val POINT_TWO_DISTANCE = 200
