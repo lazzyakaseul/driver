@@ -11,7 +11,6 @@ class PathDispatcher {
     var carY = 0f
 
     fun countPoints(px2: Float, py2: Float, angle: Float): BezierCurve {
-
         val x2 = carX + cos(angle) * POINT_TWO_DISTANCE
         val y2 = carY - sin(angle) * POINT_TWO_DISTANCE
         val x4 = px2
@@ -22,14 +21,21 @@ class PathDispatcher {
         val angleDegRound = if (angleInDegrees < 0) angleInDegrees + 360 else angleInDegrees
         val angleDegTwoRound = if (angleTwoInDegrees < 0) angleTwoInDegrees + 360 else angleTwoInDegrees
 
-        val diff = Math.abs(angleDegRound - angleDegTwoRound)
-        val resAngle = Math.toRadians(
-            if (diff <= 180) {
-                angleInDegrees + 90
-            } else {
-                angleTwoInDegrees - 90
-            }
-        )
+        val diff = angleDegRound - angleDegTwoRound
+        val resAngle = when {
+            Math.abs(diff) <= 180 && diff > 0 -> angleInDegrees - 90
+            Math.abs(diff) <= 180 && diff <= 0 -> angleInDegrees + 90
+            Math.abs(diff) > 180 && diff > 0 -> angleInDegrees + 90
+            Math.abs(diff) > 180 && diff <= 0 -> angleInDegrees - 90
+            else -> 0.0
+        }
+//        val resAngle = Math.toRadians(
+//            if (diff <= 180) {
+//                angleInDegrees + 90
+//            } else {
+//                angleInDegrees - 90
+//            }
+//        )
 
         val ax = x2 - carX
         val ay = y2 - carY

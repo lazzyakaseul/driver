@@ -46,9 +46,10 @@ class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnUpdate: () -> U
         }
     }
 
-    fun setStartPosition(startX: Float, startY: Float) {
+    fun setStartPosition(startX: Float, startY: Float, startAngle: Float) {
         carMatrix.reset()
-        carMatrix.postTranslate(startX, startY)
+        carMatrix.setTranslate(startX, startY)
+        carMatrix.preRotate(startAngle)
     }
 
     fun setOnFinishListener(doOnFinish: () -> Unit) {
@@ -63,6 +64,12 @@ class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnUpdate: () -> U
         }
         pathMeasure.setPath(path, false)
         animator.start()
+    }
+
+    fun receiveAngle(): Double {
+        val values = FloatArray(9)
+        carMatrix.getValues(values)
+        return Math.atan2(values[Matrix.MSKEW_X].toDouble(), values[Matrix.MSCALE_X].toDouble())
     }
 
 }
