@@ -3,6 +3,7 @@ package com.something.driver
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.os.Bundle
 import android.os.Parcelable
@@ -19,42 +20,47 @@ class CarTrackView @JvmOverloads constructor(context: Context, attrs: AttributeS
     View(context, attrs, defStyleAttr) {
 
     private val car = BitmapFactory.decodeResource(resources, R.drawable.ic_taxi)
+    private val offsetX = car.width / 2f
+    private val offsetY = car.height / 2f
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val carMatrix = Matrix()
     private val animationHelper: AnimationHelper
     private val pathDispatcher = PathDispatcher()
     private var roadColor: Int by Delegates.notNull()
     private var handleTouches = true
+
+    private var cacheAngle: Float by Delegates.notNull()
     private var cacheX = 0f
     private var cacheY = 0f
-    private var cacheAngle = 90f
     private var cacheOldValue = 0
     private var cacheSurfRotation = 0
 
     init {
-        animationHelper = AnimationHelper(TRIP_DURATION, { handleTouches = false }, { invalidate() })
-            .apply {
-                setOnFinishListener {
-                    handleTouches = true
-                    pathDispatcher.carX = endPoint[0]
-                    pathDispatcher.carY = endPoint[1]
-                }
-            }
+        animationHelper =
+            AnimationHelper(TRIP_DURATION, { handleTouches = false }, { handleTouches = true }, { invalidate() })
         attrs?.apply {
-            val typedArray = context.obtainStyledAttributes(this, R.styleable.CarTrackView, 0, 0)
-            typedArray.getResourceId(R.styleable.CarTrackView_roadColor, 0)
-                .apply {
-                    roadColor = ContextCompat.getColor(context, if (this > 0) this else R.color.colorAccent)
-                }
-
-            typedArray.recycle()
+            context.obtainStyledAttributes(this, R.styleable.CarTrackView, 0, 0).apply {
+                getResourceId(R.styleable.CarTrackView_roadColor, 0)
+                    .apply {
+                        roadColor = ContextCompat.getColor(context, if (this > 0) this else R.color.colorAccent)
+                    }
+                getFloat(R.styleable.CarTrackView_carStartAngle, 0f)
+                    .apply {
+                        cacheAngle = this
+                    }
+                recycle()
+            }
         }
 
         setOnTouchListener { _, event ->
             when (event.action and MotionEvent.ACTION_MASK) {
                 MotionEvent.ACTION_UP -> {
                     if (handleTouches) {
-                        pathDispatcher.countPoints(event.x, event.y, animationHelper.receiveAngle().toFloat()).apply {
-                            animationHelper.animate(this)
+                        animationHelper.getPosition().apply {
+                            pathDispatcher.countPoints(x, y, event.x, event.y, animationHelper.receiveAngle().toFloat())
+                                .apply {
+                                    animationHelper.animate(this)
+                                }
                         }
                     }
                 }
@@ -67,13 +73,12 @@ class CarTrackView @JvmOverloads constructor(context: Context, attrs: AttributeS
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         if (cacheX > 0 && cacheY > 0 && cacheSurfRotation != getScreenRotation()) {
             getNewCoordinates(cacheX, cacheY).apply {
-                setStartPositions(first, second, getNewAngle(cacheAngle))
+                val angle = -(cacheAngle * 180 / Math.PI).toFloat()
+                setStartPositions(first, second, getNewAngle(angle))
             }
         } else if (cacheX == 0f && cacheY == 0f) {
-            val startX =
-                measuredWidth / 2f + car.height / 2//cos(Math.toRadians(cacheAngle.toDouble())).toFloat() * car.width / 2
-            val startY =
-                measuredHeight / 2f - car.width / 2//sin(Math.toRadians(cacheAngle.toDouble())).toFloat() * car.height / 2
+            val startX = measuredWidth / 2f + offsetY
+            val startY = measuredHeight / 2f - offsetX
             setStartPositions(startX, startY, cacheAngle)
         }
     }
@@ -81,27 +86,35 @@ class CarTrackView @JvmOverloads constructor(context: Context, attrs: AttributeS
     override fun onDraw(canvas: Canvas?) {
         canvas?.apply {
             drawColor(roadColor)
-            canvas.drawBitmap(car, animationHelper.carMatrix, paint)
+            carMatrix.reset()
+            carMatrix.postRotate(animationHelper.getAngleInDegrees(), offsetX, offsetY)
+            animationHelper.getPosition()
+                .apply {
+                    carMatrix.postTranslate(this.x - offsetX, this.y - offsetY)
+                }
+            canvas.drawBitmap(car, carMatrix, paint)
         }
         super.onDraw(canvas)
     }
 
     override fun onSaveInstanceState(): Parcelable? {
-        val bundle = Bundle()
-        bundle.putParcelable(SUPER_STATE, super.onSaveInstanceState())
-        bundle.putFloat(POINT_X, pathDispatcher.carX)
-        bundle.putFloat(POINT_Y, pathDispatcher.carY)
-        val angle = -(animationHelper.receiveAngle() * 180 / Math.PI).toFloat()
-        bundle.putFloat(ANGLE, angle)
-        bundle.putInt(SURF_ROTATION, cacheSurfRotation)
+        return Bundle().apply {
+            putParcelable(SUPER_STATE, super.onSaveInstanceState())
+            animationHelper.getPosition()
+                .apply {
+                    putFloat(POINT_X, x)
+                    putFloat(POINT_Y, y)
+                }
+            putFloat(ANGLE, animationHelper.receiveAngle().toFloat())
+            putInt(SURF_ROTATION, cacheSurfRotation)
+            val oldValue = if (getScreenRotation().let { it == ROTATION_90 || it == ROTATION_270 }) {
+                measuredWidth
+            } else {
+                measuredHeight
+            }
+            putInt(OLD_VALUE, oldValue)
 
-        val oldValue = if (getScreenRotation().let { it == ROTATION_90 || it == ROTATION_270 }) {
-            measuredWidth
-        } else {
-            measuredHeight
         }
-        bundle.putInt(OLD_VALUE, oldValue)
-        return bundle
     }
 
     override fun onRestoreInstanceState(state: Parcelable?) {
@@ -143,14 +156,8 @@ class CarTrackView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private fun getScreenRotation() =
         (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.rotation
 
-
-    private fun setStartPositions(startX: Float, startY: Float, startAngle: Float) {
-        animationHelper.setStartPosition(startX, startY, startAngle)
-        pathDispatcher.apply {
-            carX = startX
-            carY = startY
-        }
-    }
+    private fun setStartPositions(startX: Float, startY: Float, startAngle: Float) =
+        animationHelper.setStartPosition(startX, startY, Math.toRadians(startAngle.toDouble()).toFloat())
 
     private companion object {
 

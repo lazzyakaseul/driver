@@ -7,10 +7,7 @@ import kotlin.math.sqrt
 
 class PathDispatcher {
 
-    var carX = 0f
-    var carY = 0f
-
-    fun countPoints(px2: Float, py2: Float, angle: Float): BezierCurve {
+    fun countPoints(carX: Float, carY: Float, px2: Float, py2: Float, angle: Float): BezierCurve {
         val x2 = carX + cos(angle) * POINT_TWO_DISTANCE
         val y2 = carY - sin(angle) * POINT_TWO_DISTANCE
         val x4 = px2

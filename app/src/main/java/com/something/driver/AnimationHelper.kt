@@ -2,18 +2,19 @@ package com.something.driver
 
 import android.animation.Animator
 import android.animation.ValueAnimator
-import android.graphics.Matrix
 import android.graphics.Path
 import android.graphics.PathMeasure
+import android.graphics.PointF
 import android.view.animation.AccelerateDecelerateInterpolator
+import kotlin.math.cos
+import kotlin.math.sin
 
 
-class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnUpdate: () -> Unit) {
-    val endPoint = FloatArray(2) { 0f }
-    val carMatrix = Matrix()
-    private var doOnFinish: (() -> Unit)? = null
+class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnFinish: () -> Unit, doOnUpdate: () -> Unit) {
+    private val positionPoint = FloatArray(2) { 0f }
+    private val tan = FloatArray(2) { 0f }
     private val animator = ValueAnimator()
-    val path = Path()
+    private val path = Path()
     private val pathMeasure = PathMeasure()
 
     init {
@@ -22,13 +23,7 @@ class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnUpdate: () -> U
             this.interpolator = AccelerateDecelerateInterpolator()
             setFloatValues(0f, 1f)
             addUpdateListener {
-                carMatrix.reset()
-                pathMeasure.getMatrix(
-                    pathMeasure.length * it.animatedFraction,
-                    carMatrix,
-                    PathMeasure.POSITION_MATRIX_FLAG + PathMeasure.TANGENT_MATRIX_FLAG
-                )
-                pathMeasure.getPosTan(pathMeasure.length * it.animatedFraction, endPoint, null)
+                pathMeasure.getPosTan(pathMeasure.length * it.animatedFraction, positionPoint, tan)
                 doOnUpdate()
             }
             addListener(object : Animator.AnimatorListener {
@@ -46,14 +41,15 @@ class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnUpdate: () -> U
         }
     }
 
-    fun setStartPosition(startX: Float, startY: Float, startAngle: Float) {
-        carMatrix.reset()
-        carMatrix.setTranslate(startX, startY)
-        carMatrix.preRotate(startAngle)
-    }
+    fun getPosition() = PointF(positionPoint[0], positionPoint[1])
 
-    fun setOnFinishListener(doOnFinish: () -> Unit) {
-        this.doOnFinish = doOnFinish
+    fun getAngleInDegrees() = (Math.atan2(tan[1].toDouble(), tan[0].toDouble()) * 180.0 / Math.PI).toFloat()
+
+    fun setStartPosition(startX: Float, startY: Float, startAngleInRadians: Float) {
+        positionPoint[0] = startX
+        positionPoint[1] = startY
+        tan[0] = cos(startAngleInRadians)
+        tan[1] = sin(startAngleInRadians)
     }
 
     fun animate(curve: BezierCurve) {
@@ -67,9 +63,7 @@ class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnUpdate: () -> U
     }
 
     fun receiveAngle(): Double {
-        val values = FloatArray(9)
-        carMatrix.getValues(values)
-        return Math.atan2(values[Matrix.MSKEW_X].toDouble(), values[Matrix.MSCALE_X].toDouble())
+        return -Math.atan2(tan[1].toDouble(), tan[0].toDouble())
     }
 
 }

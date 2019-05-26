@@ -2,5 +2,6 @@
 <resources>
     <declare-styleable name="CarTrackView">
         <attr name="roadColor" format="color" />
+        <attr name="carStartAngle" format="float" />
     </declare-styleable>
 </resources>

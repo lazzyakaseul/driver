@@ -10,6 +10,7 @@
         android:id="@+id/carView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:roadColor="@android:color/holo_blue_bright"/>
+        app:roadColor="@android:color/holo_blue_bright"
+        app:carStartAngle="60"/>
 
 </FrameLayout>
