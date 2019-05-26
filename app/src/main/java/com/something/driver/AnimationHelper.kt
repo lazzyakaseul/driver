@@ -13,7 +13,7 @@ class AnimationHelper(duration: Long, doOnStart: () -> Unit, doOnUpdate: () -> U
     val carMatrix = Matrix()
     private var doOnFinish: (() -> Unit)? = null
     private val animator = ValueAnimator()
-    private val path = Path()
+    val path = Path()
     private val pathMeasure = PathMeasure()
 
     init {

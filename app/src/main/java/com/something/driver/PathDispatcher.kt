@@ -28,14 +28,13 @@ class PathDispatcher {
             Math.abs(diff) > 180 && diff > 0 -> angleInDegrees + 90
             Math.abs(diff) > 180 && diff <= 0 -> angleInDegrees - 90
             else -> 0.0
-        }
-//        val resAngle = Math.toRadians(
-//            if (diff <= 180) {
-//                angleInDegrees + 90
-//            } else {
-//                angleInDegrees - 90
-//            }
-//        )
+        }.run {
+            when {
+                Math.abs(this) > 180 && this > 0 -> this - 360
+                Math.abs(this) > 180 && this < 0 -> this + 360
+                else -> this
+            }
+        }.run { Math.toRadians(this) }
 
         val ax = x2 - carX
         val ay = y2 - carY
@@ -55,7 +54,7 @@ class PathDispatcher {
     companion object {
 
         private const val POINT_TWO_DISTANCE = 200
-        private const val POINT_THREE_DISTANCE = 4
+        private const val POINT_THREE_DISTANCE = 5
 
     }
 
